@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "csma"
+version = "0.1.0"
+description = "Cross-Species Multi-Agent System — heterogeneous bio-inspired multi-agent framework"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Nikshay"},
+]
+
+dependencies = [
+    "deepagents>=0.6",
+    "langgraph>=0.4",
+    "langchain>=0.3",
+    "langchain-openai>=0.3",
+    "langchain-anthropic>=0.3",
+    "langgraph-swarm>=0.1",
+    "mealpy>=3.0",
+    "networkx>=3.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["csma*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

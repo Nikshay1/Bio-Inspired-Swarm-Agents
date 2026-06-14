@@ -1,0 +1,47 @@
+{
+    "description": "6-city delivery planning problem for CSMA demo",
+    "cities": ["Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata", "Hyderabad"],
+    "distance_matrix_km": [
+        [   0, 1400, 980, 1330, 2050, 710],
+        [1400,    0, 2150, 2180, 1530, 1550],
+        [ 980, 2150,    0,  350, 1870,  570],
+        [1330, 2180,  350,    0, 1660,  630],
+        [2050, 1530, 1870, 1660,    0, 1490],
+        [ 710, 1550,  570,  630, 1490,    0]
+    ],
+    "shipping_partners": [
+        {
+            "name": "DHL",
+            "scores": {
+                "cost": 0.70,
+                "reliability": 0.92,
+                "speed": 0.85,
+                "coverage": 0.95
+            }
+        },
+        {
+            "name": "FedEx",
+            "scores": {
+                "cost": 0.60,
+                "reliability": 0.95,
+                "speed": 0.90,
+                "coverage": 0.88
+            }
+        },
+        {
+            "name": "BlueDart",
+            "scores": {
+                "cost": 0.85,
+                "reliability": 0.80,
+                "speed": 0.75,
+                "coverage": 0.70
+            }
+        }
+    ],
+    "criteria": [
+        {"name": "cost",        "weight": 2.0},
+        {"name": "reliability", "weight": 1.5},
+        {"name": "speed",       "weight": 1.0},
+        {"name": "coverage",    "weight": 0.5}
+    ]
+}
