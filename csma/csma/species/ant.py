@@ -97,14 +97,33 @@ def _solve_tsp_nearest_neighbor(G: nx.Graph, start: str | None = None) -> tuple[
     return visited, total_cost
 
 
-def _solve_with_acor(G: nx.Graph, n_ants: int = 50, epochs: int = 100) -> tuple[list[str], float]:
+def _path_cost(G: nx.Graph, path: list[str]) -> float:
+    """Compute the total edge weight along a path."""
+    total = 0.0
+    for i in range(len(path) - 1):
+        n1, n2 = path[i], path[i + 1]
+        if G.has_edge(n1, n2):
+            total += G[n1][n2]["weight"]
+    return total
+
+
+def _solve_with_acor(
+    G: nx.Graph,
+    start_node: str | None = None,
+    n_ants: int = 50,
+    epochs: int = 100,
+) -> tuple[list[str], float]:
     """Use mealpy ACOR to optimize a route through the graph.
 
     ACOR works in continuous space, so we encode node permutation as
     continuous variables and decode via argsort (rank-order encoding).
 
+    When ``start_node`` is set, that node is fixed as the first position
+    and only the remaining n-1 nodes are optimized.
+
     Args:
         G: The weighted graph.
+        start_node: If provided, the route must begin at this node.
         n_ants: Population size for ACOR.
         epochs: Number of optimization epochs.
 
@@ -114,21 +133,27 @@ def _solve_with_acor(G: nx.Graph, n_ants: int = 50, epochs: int = 100) -> tuple[
     from mealpy import FloatVar
     from mealpy.swarm_based.ACOR import OriginalACOR
 
-    nodes = list(G.nodes())
-    n = len(nodes)
+    all_nodes = list(G.nodes())
 
-    if n <= 2:
+    # Separate fixed start from the nodes to optimize
+    if start_node and start_node in all_nodes:
+        remaining = [n for n in all_nodes if n != start_node]
+    else:
+        start_node = None  # ignore invalid / missing start
+        remaining = all_nodes
+
+    m = len(remaining)  # number of nodes ACOR optimizes
+
+    if m <= 2:
         # Too small for optimization — just return direct
-        cost = 0.0
-        if n == 2 and G.has_edge(nodes[0], nodes[1]):
-            cost = G[nodes[0]][nodes[1]]["weight"]
-        return nodes, cost
+        path = ([start_node] if start_node else []) + remaining
+        cost = _path_cost(G, path)
+        return path, cost
 
     # Distance lookup (default to large value if edge missing)
     big_penalty = 1e6
 
-    def dist(i: int, j: int) -> float:
-        n1, n2 = nodes[i], nodes[j]
+    def _edge_weight(n1: str, n2: str) -> float:
         if G.has_edge(n1, n2):
             return G[n1][n2]["weight"]
         return big_penalty
@@ -136,13 +161,21 @@ def _solve_with_acor(G: nx.Graph, n_ants: int = 50, epochs: int = 100) -> tuple[
     def objective(solution: np.ndarray) -> float:
         """Total route cost from rank-order decoded permutation."""
         perm = np.argsort(solution)
-        total = 0.0
-        for k in range(n - 1):
-            total += dist(int(perm[k]), int(perm[k + 1]))
+        # Build full path: fixed start (if any) + optimized remainder
+        if start_node:
+            ordered = [remaining[int(i)] for i in perm]
+            total = _edge_weight(start_node, ordered[0])
+            for k in range(len(ordered) - 1):
+                total += _edge_weight(ordered[k], ordered[k + 1])
+        else:
+            ordered = [remaining[int(i)] for i in perm]
+            total = 0.0
+            for k in range(len(ordered) - 1):
+                total += _edge_weight(ordered[k], ordered[k + 1])
         return total
 
     problem_dict = {
-        "bounds": FloatVar(lb=[0.0] * n, ub=[1.0] * n),
+        "bounds": FloatVar(lb=[0.0] * m, ub=[1.0] * m),
         "minmax": "min",
         "obj_func": objective,
     }
@@ -152,8 +185,12 @@ def _solve_with_acor(G: nx.Graph, n_ants: int = 50, epochs: int = 100) -> tuple[
 
     # Decode best solution
     best_perm = np.argsort(model.g_best.solution)
-    path = [nodes[int(i)] for i in best_perm]
-    total_cost = float(model.g_best.target.fitness)
+    path = ([start_node] if start_node else []) + [
+        remaining[int(i)] for i in best_perm
+    ]
+    # Recompute cost from the decoded path (avoids float drift from
+    # continuous-space fitness that may not match the discrete route)
+    total_cost = _path_cost(G, path)
 
     return path, total_cost
 
@@ -174,6 +211,7 @@ def ant_route_optimizer(input_json: str) -> str:
                 "edges": [{"from": "A", "to": "B", "weight": 10.0}, ...],
                 // OR instead of edges:
                 "distance_matrix": [[0, 10, 20], [10, 0, 15], [20, 15, 0]],
+                "start_node": "A" (optional — if set, route starts here),
                 "method": "acor" | "nearest_neighbor" (optional, default "acor")
             }
 
@@ -184,20 +222,24 @@ def ant_route_optimizer(input_json: str) -> str:
     data = json.loads(input_json)
     subtask_id = data.get("subtask_id", "ant-task")
     method = data.get("method", "acor")
+    start_node = data.get("start_node", None)
 
     logger.info("AntAgent: building graph from %d nodes", len(data.get("nodes", [])))
     G = _build_graph(data)
 
+    if start_node:
+        logger.info("AntAgent: start_node=%s (route will begin here)", start_node)
+
     if method == "nearest_neighbor" or len(G.nodes()) <= 3:
         logger.info("AntAgent: using nearest-neighbor heuristic")
-        path, cost = _solve_tsp_nearest_neighbor(G)
+        path, cost = _solve_tsp_nearest_neighbor(G, start=start_node)
     else:
         logger.info("AntAgent: running ACOR optimization (%d nodes)", len(G.nodes()))
         try:
-            path, cost = _solve_with_acor(G)
+            path, cost = _solve_with_acor(G, start_node=start_node)
         except Exception as e:
             logger.warning("AntAgent: ACOR failed (%s), falling back to nearest-neighbor", e)
-            path, cost = _solve_tsp_nearest_neighbor(G)
+            path, cost = _solve_tsp_nearest_neighbor(G, start=start_node)
 
     # Build the path edges for the payload
     path_graph = nx.Graph()

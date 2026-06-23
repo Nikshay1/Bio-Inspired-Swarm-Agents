@@ -47,8 +47,11 @@ SEARCH_AGENT = {
         "distances).\n"
         "2. Format the input as a JSON string matching the tool's expected "
         "schema.\n"
-        "3. Call the appropriate species tool.\n"
-        "4. Return the tool's output (a BusMessage JSON) unchanged — do NOT "
+        "3. If the problem specifies a STARTING CITY or STARTING NODE, you "
+        "MUST include it as the `start_node` field in the JSON input. "
+        "For example: {\"start_node\": \"Mumbai\", \"nodes\": [...], ...}\n"
+        "4. Call the appropriate species tool.\n"
+        "5. Return the tool's output (a BusMessage JSON) unchanged — do NOT "
         "modify or reformat it.\n\n"
         "You must ALWAYS use one of your tools. Never answer directly."
     ),
